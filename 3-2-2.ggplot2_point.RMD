@@ -1,0 +1,359 @@
+---
+title: "ggplot2_scatterplots"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### 산점도 만들기
+```{r, message=FALSE, warning=FALSE}
+library(ggplot2)
+ggplot(data = mpg, aes(x = displ, y = hwy)) + # x축과 y축 배경생성
+  geom_point() + # 배경에 산점도 추가
+  xlim(3, 6) + # x축의 범위 지정
+  ylim(10, 30) # y축의 범위 지정
+```
+
+#### facet_grid() 
+- facet_grid()함수는 명목형 변수를 기준으로 그래프를 그려줌. (plot()함수에서 par(mflow=c(2,1)) 와 유사)
+- 명목형 변수의 level을 기준으로 나눠서 서로 비교하는 것이 목적.
+- facet_grid(.~) 함수에 정규식 사용, .~ 뒤에 독립변수 대입.
+
+**차량종류(class)에 따라서 산점도 나누기** 
+
+```{r}
+ggplot(data = mpg, aes(x = displ, y = hwy)) +
+  geom_point() +
+  facet_grid(.~class)
+```
+
+**종속변수 추가** 
+
+```{r}
+ggplot(data = mpg, aes(x = displ, y = hwy)) +
+  geom_point(alpha = .3) +
+  facet_grid(cyl~class, scales = "free")
+```
+
+
+#### Q1. 
+mpg 데이터의 cty(도시연비)와 hwy(고속도로 연비) 간에 어떤 관계가 있는지 알아보려 합니다.\
+x축은 cty, y축은 hwy로 된 산점도를 만들어보세요. 
+
+```{r}
+mpg <- as.data.frame(ggplot2::mpg)
+ggplot(data = mpg, aes(x = mpg$cty, y = mpg$hwy)) +
+  geom_point()
+```
+
+#### Q2.
+미국 지역별 인구통계 정보를 담은 ggplot2 패키지의 midwest 데이터를 이용해 전체 인구와 아시아인 인구 간에 어떤 관계가 있는지 알아보려 합니다. x축은 poptotal(전체인구), y축은 popasian(아시아인 인구)으로 된 산점도를 만들어 보세요. 전체 인구는 50만명 이하, 아시아인 인구는 1만명 이하인 지역만 산점도에 표시되게 설정하세요. 
+
+```{r}
+midwest <- as.data.frame(ggplot2::midwest)
+ggplot(data = midwest, aes(x = midwest$poptotal, y = midwest$popasian)) +
+  geom_point() +
+  xlim(0, 500000) +
+  ylim(0, 10000)
+  
+  
+```
+
+```{r}
+#install.packages("gcookbook")
+library(gcookbook)
+library()
+```
+
+```{r}
+heightweight1 <- heightweight[ , c("ageYear", "heightIn")]
+head(heightweight1, 5)
+```
+
+```{r}
+ggplot(heightweight, aes(x = ageYear, y = heightIn)) +
+  geom_point()
+```
+
+산점도를 만들 때 다른 모양을 사용하고 싶으면 shape 을 설정해준다.\
+기본 설정인 단색 동그라미(16) 대신 빈 동그라미(21) 을 많이들 사용한다. 
+
+```{r}
+ggplot(heightweight, aes(x = ageYear, y = heightIn)) +
+  geom_point(shape = 21)
+```
+
+점의 크기는 size로 조절할 수 있다. size 의 기본값은 2이다. 
+```{r}
+ggplot(heightweight, aes(x = ageYear, y = heightIn)) +
+  geom_point(shape = 19, size = 1)
+```
+
+### 변수를 기준으로 모양이나 색깔을 달리해 데이터점을 묶기
+
+```{r}
+ggplot(heightweight, aes(x = ageYear, y = heightIn, shape = sex, colour = sex)) +
+  geom_point()
+```
+
+```{r}
+ggplot(heightweight, aes(x = ageYear, y = heightIn, shape = sex, colour = sex)) +
+  geom_point() +
+  scale_shape_manual(values = c(1,2)) +
+  scale_colour_brewer(palette = "Set1")
+```
+
+### 연속변수를 색상이나 크기에 대입하기
+
+```{r}
+ggplot2::ggplot(heightweight, aes(x = ageYear, y = heightIn, colour = weightLb)) +
+  geom_point()
+```
+
+```{r}
+ggplot2::ggplot(heightweight, aes(x = ageYear, y = heightIn, size = weightLb)) +
+  geom_point()
+```
+
+검은색부터 흰색으로 이어지는 색조를 사용, 점을 조금 크게 만들어서 채우기 색깔이 잘 보이도록. 
+
+```{r}
+ggplot2::ggplot(heightweight, aes(x = ageYear, y = heightIn, fill = weightLb)) +
+  geom_point(shape = 21, size = 2.5) +
+  scale_fill_gradient(low = "black", high = "white")
+```
+
+guide_legend 를 사용하면 색상바 대신 분리된 범례가 나타남. 
+
+```{r}
+ggplot2::ggplot(heightweight, aes(x = ageYear, y = heightIn, fill = weightLb)) +
+  geom_point(shape = 21, size = 2.5) +
+  scale_fill_gradient(low = "black", high = "white", breaks = seq(70, 170, by = 20), 
+                      guide = guide_legend())
+```
+
+##### weightLb를 size에, sex를 colour에 대입.\
+점들이 꽤 많이 겹치므로 alpha = .5로 설정해 투명도를 50% 로 만들어줌. \
+또한 점의 크기를 값에 비례하도록 scale_size_area()도 사용
+
+```{r}
+ggplot2::ggplot(heightweight, aes(x = ageYear, y = heightIn, size = weightLb, colour = sex)) +
+  geom_point(alpha = .5) +
+  scale_size_area() + # 점의 면적을 수치형 값에 비례하도록 만듦
+  scale_colour_brewer(palette = "Set1")
+```
+
+### 겹치는 점 다루기 
+
+```{r}
+sp <- ggplot(diamonds, aes(x = carat, y = price))
+sp + geom_point()
+```
+
+```{r}
+sp + geom_point(alpha = .1)
+```
+
+
+```{r}
+sp + geom_point(alpha = .01)
+```
+
+####  비닝(bin) 시각화
+
+```{r}
+sp + stat_bin2d()
+```
+
+```{r}
+sp + stat_bin2d(bins = 50) +
+  scale_fill_gradient(low = "lightblue", high = "red", limits = c(0, 6000))
+```
+
+```{r}
+sp1 <- ggplot(ChickWeight, aes(x = Time, y = weight))
+sp1 + geom_point()
+```
+
+```{r}
+sp1 <- ggplot(ChickWeight, aes(x = Time, y = weight))
+sp1 + geom_point(position = "jitter")
+```
+
+```{r}
+sp1 <- ggplot(ChickWeight, aes(x = Time, y = weight))
+sp1 + geom_point(position = position_jitter(width = .5, height = 0))
+```
+
+```{r}
+sp1 + geom_boxplot(aes(group = Time))
+```
+
+### 적합된 회귀선 추가하기
+
+```{r}
+sp <- ggplot(heightweight, aes(x = ageYear, y = heightIn))
+sp + geom_point() + stat_smooth(method = lm)
+```
+stat_smooth() 는 기본설정으로 회귀선에 대해 95% 신뢰영역도 함께 표기해줌. \
+level 설정을 통해 신뢰구간 변경 가능. se=FALSE 로 두면 어예 끌 수도 있음. 
+
+```{r}
+sp + geom_point() + stat_smooth(method = lm, level = 0.99)
+```
+
+```{r}
+sp + geom_point() + stat_smooth(method = lm, se=FALSE)
+```
+
+회귀선의 기본색상은 파란색, colour 설정으로 변경가능, linetype과 size 속성도 변경가능. \
+
+```{r}
+sp + geom_point(colour = "grey60") + stat_smooth(method = lm, se=FALSE, colour = "black")
+```
+
+#### 산점도에 여백러그(marginal rug) 추가하기
+
+여백러그 그래프는 각 축상의 데이터 분포를 시각화하는데 사용됨. 
+
+```{r}
+ggplot(faithful, aes(x = eruptions, y = waiting)) +
+  geom_point() +
+  geom_rug()
+```
+
+러그의 선들이 많이 겹쳐있어 정보를 많이 전달해주지 못할 때, 선의 위치를 조금씩 움직이고 선의 크기를 지정해서 조금 더 얇게 만들어서 이러한 현상을 완화해줌. 
+
+```{r}
+ggplot(faithful, aes(x = eruptions, y = waiting)) +
+  geom_point() +
+  geom_rug(position = "jitter", size = .2)
+```
+
+#### 산점도의 점에 레벨 붙이기
+
+산점도의 점 하나 또는 두개에 주석을 달 때는 annotate() 또는 geom_text() 사용. 
+
+```{r}
+library(gcookbook)
+subset(countries, Year == 2009 & healthexp > 2000)
+```
+
+```{r}
+sp <- ggplot(subset(countries, Year == 2009 & healthexp > 2000), 
+             aes(x = healthexp, y = infmortality)) +
+  geom_point()
+sp + annotate("text", x = 4350, y = 5.4, label = "Canada") +
+     annotate("text", x = 7400, y = 6.8, label = "USA")
+```
+
+```{r}
+sp + geom_text(aes(label = Name), size = 3)
+```
+데이터로부터 자동으로 라벨을 가져와 넣음. \
+size 의 기본값은 5
+
+```{r}
+sp + geom_text(aes(label = Name), size = 3, vjust = 0)
+```
+vjust = 0 으로 설정하면 텍스트의 하단선을 점과 동일한 수준으로 맞추게 되며, \
+vjust = 1 로 하면 텍스트의 상단선을 점과 같은 위치에 맞추게 됨.\
+
+대입하는 y의 값을 조금 더하거나 빼서 동일한 효과.
+
+
+```{r}
+sp + geom_text(aes(y = infmortality+.1, label = Name), size = 3, vjust = 0)
+```
+
+#### 거품그래프 (ballon plot)
+
+```{r}
+cdat <- subset(countries, Year == 2009 & 
+  Name %in% c("Canada", "Ireland", "United Kingdom", "United States", "New Zealand", "Iceland", 
+              "Japan", "Luxembourg", "Netherlands", "Switzerland"))
+cdat
+```
+
+```{r}
+p <- ggplot(cdat, aes(x = healthexp, y = infmortality, size = GDP)) +
+  geom_point(shape = 21, colour = "black", fill = "cornsilk")
+p
+```
+GDP 를 반지름에 대입. scale_size_continuous 가 기본설정
+
+```{r}
+p + scale_size_area(max_size = 15)
+```
+GDP를 영역에 대입하고 원의 크기를 확대 
+
+### 클리블랜드 점 그래프 (Cleverland dot plot) 그리기
+
+```{r}
+tophit <- tophitters2001[1:25, ]
+ggplot(tophit, aes(x = avg, y = name)) +
+  geom_point()
+```
+
+```{r}
+tophit[ , c("name", "lg", "avg")]
+```
+
+- name 을 avg 기준으로 정렬
+- 테마시스템을 이용하여 수직격자를 없애고, 수평선을 모두 점선으로 바꿈
+
+```{r}
+tophit <- tophitters2001[1:25, ]
+ggplot(tophit, aes(x = avg, y = reorder(name, avg))) +
+  geom_point(size = 3) +
+  theme_bw(base_family = "") +
+  theme(panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        panel.grid.major.y = element_line(colour = "grey60", linetype = "dashed"))
+```
+
+- 이름을 x축으로, 값을 y축으로
+- 텍스트라벨을 60도로 회전
+```{r}
+tophit <- tophitters2001[1:25, ]
+ggplot(tophit, aes(x = reorder(name, avg), y = avg)) +
+  geom_point(size = 3) +
+  theme_bw(base_family = "") +
+  theme(axis.text.x = element_text(angle=60, hjust=1),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        panel.grid.major.y = element_line(colour = "grey60", linetype = "dashed"))
+```
+
+- lg 로 먼저, 이어서 avg 를 기준으로 정렬
+```{r}
+nameorder <- tophit$name[order(tophit$lg, tophit$avg)]
+tophit$name <- factor(tophit$name, levels = nameorder)
+
+ggplot(tophit, aes(x = avg, y = name)) +
+  geom_segment(aes(yend=name), xend=0, colour = "grey50") +
+  geom_point(size = 3, aes(colour = lg)) +
+  scale_colour_brewer(palette = "Set1", limits = c("NL", "AL")) +
+  theme_bw(base_family = "") +
+  theme(panel.grid.major.y = element_blank(), #수평 격자선을 없앰
+        legend.position = c(1, 0.55), #범례를 그래프 안쪽으로 옮김
+        legend.justification = c(1, 0.5))
+```
+
+- 면분할(facet)을 사용하여 두 집단을 구분
+
+```{r}
+ggplot(tophit, aes(x = avg, y = name)) +
+  geom_segment(aes(yend=name), xend=0, colour = "grey50") +
+  geom_point(size = 3, aes(colour = lg)) +
+  scale_colour_brewer(palette = "Set1", limits = c("NL", "AL"), guide = FALSE) +
+  theme_bw(base_family = "") +
+  theme(panel.grid.major.y = element_blank()) + #수평 격자선을 없앰
+  facet_grid(lg ~ ., scales = "free_y", space = "free_y")
+```
+
+
+
+

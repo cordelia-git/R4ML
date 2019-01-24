@@ -1,0 +1,142 @@
+---
+title: "ggplot2_boxplot"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### 상자그림 (Boxplot) 그리기
+
+상자그림(boxplot)은 데이터의 분포(퍼져있는 형태)를 직사각형 상자모양으로 표현한 그래프.\
+상자그림을 보면 분포를 알 수 있기 때문에 평균만 볼 때보다 데이터의 특성을 좀 더 자세히 이해할 수 있음. \
+
+```{r}
+library(dplyr)
+library(ggplot2)
+ggplot(mpg, aes(x = drv, y = hwy)) +
+  geom_boxplot()
+```
+
+```{r}
+ggplot(mpg, aes(x = class, y = cty)) +
+  geom_boxplot()
+```
+
+```{r}
+library(dplyr)
+mpg_class <- mpg %>% 
+  filter(class %in% c("compact", "subcompact", "suv"))
+
+ggplot(mpg_class, aes(x = class, y = cty)) +
+  geom_boxplot()  
+```
+
+factor() 를 이용하여 수치형 변수를 이산형으로 변환
+```{r}
+library(MASS)
+ggplot(birthwt, aes(x = factor(race), y = bwt)) +
+  geom_boxplot()
+```
+
+```{r}
+ggplot(birthwt, aes(x = factor(race), y = bwt)) +
+  geom_boxplot(outlier.size = 1.5, outlier.shape = 21)
+```
+
+#### 박스플롯에 V 모양 추가하기
+- 박스플롯에서 분포의 중앙값이 다른지를 시각적으로 가늠해보기 위해 사용
+- V모양이 겹치지 않으면 중앙값이 다르다는 말.
+
+```{r}
+ggplot(birthwt, aes(x = factor(race), y = bwt)) +
+  geom_boxplot(notch = TRUE)
+```
+
+#### 박스플롯에 평균넣기
+
+```{r}
+ggplot(birthwt, aes(x = factor(race), y = bwt)) +
+  geom_boxplot(outlier.size = 1.5, outlier.shape = 21) +
+  stat_summary(fun.y = "mean", geom = "point", shape = 23, size = 3, fill = "red")
+```
+
+### 바이올린 그래프 그리기
+
+여러집단의 밀도 추정치 비교
+
+```{r}
+library(gcookbook)
+p <- ggplot(heightweight, aes(x = sex, y = heightIn)) 
+p +  geom_violin()
+```
+
+- 바이올린 그래프는 다수의 데이터 분포를 비교할 때 사용
+- 평범한 밀도곡선으로는 선들이 서로 겹치기 때문에 일정 개수 이상의 분포를 비교하기가 쉽지 않음.
+- 바이올린 그래프를 보면 분포가 옆으로 나열되기 때문에 여러개를 비교하는 것이 용이함. 
+- 또한 전통적으로, 중앙값을 흰색점으로 표기한 얇은 박스플롯도 겹처 그림.
+- outlier.colour = NA 로 설정하여 박스플롯에 있던 이상치는 보이지 않음.
+- 꼬리를 유지하고 싶으면 trim = FALSE
+
+```{r}
+p <- ggplot(heightweight, aes(x = sex, y = heightIn)) 
+p +  geom_violin() +
+  geom_boxplot(width = .1, fill = "black", outlier.colour = NA) +
+  stat_summary(fun.y = median, geom = "point", fill = "white", shape = 21, size = 2.5)
+```
+
+```{r}
+p + geom_violin(trim = FALSE)
+```
+
+각 집단의 곽측개수에 비례하게 면접으로 조절하는 것도 가능. scale="count"
+
+```{r}
+p + geom_violin(scale = "count")
+```
+
+### 점 그래프 그리기
+
+```{r}
+ggplot(heightweight, aes(x = sex, y = heightIn)) +
+  geom_boxplot(aes(x = as.numeric(sex) + .2, group = sex), width = .25) +
+  geom_dotplot(aes(x = as.numeric(sex) - .2, group = sex), binaxis = "y",
+               banwidth = .5, stackdir = "center") +
+  scale_x_continuous(breaks = 1:nlevels(heightweight$sex),
+                     labels = levels(heightweight$sex))
+```
+
+### 2차원 데이터의 밀도그래프
+
+- stat_density2d() 사용 : 데이터로부터 2D 커널 밀도 추정치를 만듦
+
+```{r}
+p <- ggplot(faithful, aes(x = eruptions, y = waiting))
+p + geom_point() + stat_density2d()
+```
+
+..level..을 통해 밀도곡선의 '높이'를 등고선의 색상에 대입할 수도 있음. 
+
+```{r}
+p + stat_density2d(aes(colour = ..level..))
+```
+
+밀도 추정치를 채우기 색상에 대입
+
+```{r}
+p + stat_density2d(aes(fill = ..density..), geom = "raster", contour = FALSE)
+```
+
+점을 나타내고, 밀도추정치를 alpha 에 대입
+
+```{r}
+p + geom_point() +
+  stat_density2d(aes(alpha = ..density..), geom = "tile", contour = FALSE)
+```
+
+
+```{r}
+p + stat_density2d(aes(fill = ..density..), geom = "raster", contour = FALSE, h = c(.5, 5))
+```
+

@@ -1,0 +1,225 @@
+---
+title: "R base functions for importing data"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1. Read tabular data into R
+
+####  `read.table()` : 테이블 포맷으로 되어 있는 파일을 읽어 데이터프레임을 반환한다.
+- usage: read.table(file, header = FALSE, sep = "") 
+- parameter:
+    + 파일의 맨 위에 열의 이름을 부여하는 '헤더라인' 을 포함하는 경우, header = TRUE 를 지정하면 데이터프레임을 만들때 열 이름을 붙여준다.
+    + 이 함수는 데이터 필드가 빈 칸 (공백이나 탭) 으로 구분될 것이라고 자동으로 가정한다는 특징이 있으므로,  빈칸 대신 다른 구분자를 사용하는 파일이라면 sep 파라미터로 지정한다. (예) sep = ":"
+    + 이 함수는 기본으로 문자열 등 비수치형 데이터를 요인(Factor)으로 해석한다. 문자열을 요인으로 해석하지 못하게 하려면 stringAsFactors = FALSE 로 지정하면 된다. 
+    + *R 에서 true, false 논리연산자는 대문자 TRUE/FALSE 혹은 T/F 로 표시함*
+    
+#### `read.csv()`: 값이 comma 로 구분되어 있는 파일(“.csv”)을 읽어 데이터프레임을 반환한다. 
+- csv : comma-separated value 의 약자
+- csv 파일 형식은 엑셀 등 스프레드시트 프로그램, 데이터베이스 관리자 및  대부분의 통계 패키지들이 데이터를 가져오고 내보낼 수 있는 형식이기 때문에 널리 쓰이고 있다.
+- usage: read.csv(file, header = TRUE, sep = ",")
+- parameter : read.table 과 동일
+
+
+### (1) 파일 불러오기
+
+- data 폴더에 저장해놓은 commute.txt 을 읽어와서 commute 라는 변수에 할당함. 
+- commute.txt 파일 : Departure and arrival times for Dr. Breheny's evening commute in Summer/Fall 2010 (https://web.as.uky.edu/statistics/users/pbreheny/764-F11/data.html)
+
+```{r}
+# Read tabular data into R as a dataframe 
+commute <- read.table("data/commute.txt", header = TRUE, sep = "\t", stringsAsFactors = F)
+# 첫 6행 읽기
+head(commute)  
+```
+
+commute.txt 데이터를 통해 요일별 출근소요시간을 파악해보자. 이 과정에서 데이터 자료형 변환과 날짜시간 자료형에 대해 함께 살펴보기로 한다. 
+
+### (2) 데이터 자료형 변환 및 연산
+
+- 파일에서 읽어들인 데이터프레임의 자료구조를 확인한 후 필요한 형태로 변환한다.
+- 자료형을 변환하려면 as.'자료형'( ) 함수를 사용한다.
+    + 예: as.character(), as.factor(), as.numeric(), as.integer()
+    
+```{r}
+# commute data frame 구조 확인
+str(commute)  
+```
+
+- 변수들은 모두 문자열 자료형(chr)으로 되어 있다. 
+- 시계열 데이터를 다룰 때 변수를 날짜 타입으로 변환하면 활용에 편리한 점이 많다. 
+- R의 날짜 자료형으로는 "Date" 객체 이외에 "POSIXct", "POSIXlt" 등이 있으며, as.POSIXct 함수를 통해 문자 변수를 변환할 수 있다.
+
+- POSIXct 와 POSIXlt 는 모두 POSIXt 를 상속, 구현한 datetime 표기 클래스
+    + POSIXct 는 1970-01-01 00:00:00 을 기준으로 이후 시간을 millisecond 단위의 1개 numeric 으로 표기하고 있으며 timezone 을 attribute 로 가지고 있다
+    + 반면 POSIXlt 는 연, 월, 일 등 다양한 시간 요소들을 list 형태로 모두 갖고 있다
+
+
+
+```{r}
+# Date 와 Depart, Date 와 Arrive 컬럼을 각각 합쳐서 POSIXct 형으로 변환
+?POSIXct
+as.POSIXct("2018/11/06 4:20")
+as.POSIXlt("2018/11/06 4:20")
+
+Dep <- as.POSIXct(paste(commute$Date, commute$Depart))  # paste() : 문자열 합치기
+Arr <- as.POSIXct(paste(commute$Date, commute$Arrive))
+
+# POSIXct 형으로 변환한 이후에는 기본 연산으로 시간차이를 계산할 수 있음
+Arr - Dep
+```
+
+```{r}
+# 시간차이 계산한 것을 Diff 변수에 할당
+Diff <- Arr - Dep
+# commute 데이터프레임에 Diff 변수 합치기
+new_commute <- cbind(commute, Diff)  # cbind : column 기준으로 합치기
+head(new_commute)
+```
+
+### (3) 요일별 출근시간 비교 시각화
+
+"difftime" 자료형으로 생성된 Diff 컬럼을 다시 숫자형으로 변경하여 Boxplot 그래프를 그린다. 
+
+```{r}
+# new_commute$Diff 의 데이터타입 확인 : difftime class 는 그래프를 그릴 수 없음
+class(new_commute$Diff)
+# Diff 벡터를 숫자형으로 변환하여 new_commute 데이터프레임에 열 추가
+Diff <- as.numeric(Diff)
+new_commute <- cbind(commute, Diff) 
+str(new_commute)
+# 상자그림 그리기
+boxplot(Diff~Day, new_commute,
+        main = "요일별 출근 소요시간",
+        ylab = "min")
+```
+
+- 기본옵션으로 요일(x축)의 알파벳 순으로 그래프가 그려짐. 
+- 요일순서로 그래프를 그리려면 요일을 요인(factor)으로 변환하고, 요인의 순서(level)를 지정하면 됨
+
+```{r}
+# Day 컬럼의 자료형을 요인으로 바꾸고 레벨의 순서를 지정
+new_commute$Day <- factor(new_commute$Day, levels = c("M", "T", "W", "H", "F"))
+str(new_commute)
+# 상자그림 그리기
+boxplot(Diff~Day, new_commute,
+        main = "요일별 출근 소요시간 (요일순)",
+        ylab = "min")
+```
+
+전달력을 높이기 위해 M, T, W, H, F 를 Monday, Tuesday... 로 변경함.
+
+```{r}
+levels(new_commute$Day)[levels(new_commute$Day)=="M"] <- "Monday"
+levels(new_commute$Day)[levels(new_commute$Day)=="T"] <- "Tuesday"
+levels(new_commute$Day)[levels(new_commute$Day)=="W"] <- "Wednesday"
+levels(new_commute$Day)[levels(new_commute$Day)=="H"] <- "Thursday"
+levels(new_commute$Day)[levels(new_commute$Day)=="F"] <- "Friday"
+
+boxplot(Diff~Day, new_commute,
+        main = "요일별 출근 소요시간 (요일순)",
+        ylab = "min")
+```
+
+**[Dr.Breheny 의 저녁 출근 소요시간 패턴읽기]**
+
+- 요일별 평균 출근소요시간은 금요일이 가장 짧고 화요일이 가장 길다
+- 금요일은 출근소요시간이 거의 일정하고, 월,화요일은 출근소요시간의 차이가 크다. 
+- 목요일은 출근소요시간의 이상치(outlier) 가 존재한다. 
+
+
+
+```{r}
+class(new_commute$Date)
+new_commute$Date <- as.Date(new_commute$Date)
+str(new_commute)
+
+library(googleVis)
+t1 <- gvisMotionChart(new_commute, idvar="Date", timevar="Diff",
+                      option=list(width=1000,height=500))
+plot(t1)
+```
+
+
+### 좀더 살펴보기
+
+#### 날짜와 시간을 다루는 클래스
+##### (1) 문자열을 날짜로 변환하기
+
+- as.Date 함수는 출력을 위해 다시 문자열로 변환되는 Date 객체를 반환한다.
+- as.Date 가 문자열을 해석할 수 있도록 format 인자를 넣어줘야 한다. 
+    + 기본으로 yyyy-mm-dd 형식일 것이라고 가정하고 변환해줌.
+    + mm/dd/yyyy 또는 mm/dd/yy 로 되어 있다면 format = "%m/%d/%Y" 또는 format = "%m/%d/%y" 를 지정해줘야 함 (대문자 Y는 4자리 연도, 소문자 y는 2자리 연도)
+
+```{r}
+as.Date("2018-09-01")
+as.Date("2018/09/01")
+as.Date("09/01/2018") # "0009-01-20" 으로 변환됨
+as.Date("09/01/2018", format = "%m/%d/%Y")
+as.Date("09/01/18", format = "%m/%d/%y" ) 
+```
+
+그 외의 형식으로 되어 있는 문자열을 날짜로 변환하려면?  
+
+- yyyy, mm, dd로 표현된 날짜 : ISOdaste 함수를 이용
+- ISOdate 함수는 세개의 숫자를 통합해 Date 객체로 변환이 가능한 POSIXct 객체(날짜 및 시간 클래스)로 만듬
+- 순수하게 날짜만 가지고 작업할 때는 Date 객체로 변환해서 쓰이지 않는 시간정보의 길이를 줄임
+
+```{r}
+# ISOdate 함수로 POSIXct 객체로 변환
+ISOdate(2018, 9, 1)
+# Date 객체로 변환
+as.Date(ISOdate(2018, 9, 1))
+```
+
+##### (2) 시간자료형에서 하위 원소 추출하기
+
+- Sys.time() 함수를 통해 현재 시스템 시간정보를 받아내면 POSIXct 클래스가 생성된다.
+
+- 문자열을 받아 as.POSIXlt(), as.POSIXct() 함수를 사용해서 시간자료형으로 변환시킨다. POSIXlt 자료형으로 변환시킨 경우 리스트로 저장되어 있어 시, 분, 초, 요일등 하위 원소값으로 뽑아낼 수 있다.
+
+```{r}
+Sys.Date()  # 현재 날짜를 반환하는 함수
+class(Sys.Date())  # Sys.Date() 함수는 Date 객체를 반환 
+as.POSIXlt(Sys.Date())$wday
+```
+
+```{r}
+Sys.time()  # 현재 날짜시간을 반환하는 함수
+class(Sys.time())  # Sys.time() 함수는 POSIXct 객체를 반환
+names(unclass(as.POSIXlt(Sys.time())))  # unclass로 리스트의 이름을 
+
+as.POSIXlt(Sys.time())$mon  # 월 (0-11, 0 = 1월)
+as.POSIXlt(Sys.time())$mday  # 해당 달의 몇번째 날 (1-31)
+as.POSIXlt(Sys.time())$wday  # 해당 주의 몇번째 날 (0-6, 0= 일요일)
+as.POSIXlt(Sys.time())$yday  # 해당 해의 몇번째 날 (0-365, 0 = 1월1일)
+```
+
+
+```{r}
+when <- as.Date(ISOdate(2018, 11, 7))
+as.POSIXlt(when)$mon  # 월 (0-11, 0 = 1월)
+as.POSIXlt(when)$mday  # 해당 달의 몇번째 날 (1-31)
+as.POSIXlt(when)$wday  # 해당 주의 몇번째 날 (0=6, 0= 일요일)
+as.POSIXlt(when)$yday  # 해당 해의 몇번째 날 (0-365, 0 = 1월1일)
+```
+*KST(Korea Standard Time, 한국 표준시) = UTC (Universal Time Coordinated, 세계협정시) +9* 
+
+```{r}
+Sys.timezone() 
+as.POSIXlt(Sys.time(), "GMT")
+as.POSIXlt(Sys.time(), "EST5EDT")  # the current time in New York
+as.POSIXlt(Sys.time(), "EST" )     # ditto, ignoring DST
+as.POSIXlt(Sys.time(), "HST")      # the current time in Hawaii
+as.POSIXlt(Sys.time(), "Australia/Darwin")
+```
+
+
+RMD 파일에서 R code 추출
+```{r}
+# library(knitr)
+# purl("1-1a.Timedata.Rmd", encoding = "UTF-8")
+```

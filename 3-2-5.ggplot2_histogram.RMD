@@ -1,0 +1,130 @@
+---
+title: "ggplot2_histogram"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### 히스토그램 : 데이터분포 요약
+
+```{r}
+library(dplyr)
+library(ggplot2)
+ggplot(faithful, aes(x = waiting)) + geom_histogram()
+```
+
+기본설정은 30개의 빈(bin)으로 묶임. 빈의 크기는 binwidth 으로 조정할 수 있음. 
+
+```{r}
+ggplot(faithful, aes(x = waiting)) + 
+  geom_histogram(binwidth = 5, fill = "white", colour = "black")
+```
+
+```{r}
+binsize <- diff(range(faithful$waiting))/15
+ggplot(faithful, aes(x = waiting)) + 
+  geom_histogram(binwidth = binsize, fill = "white", colour = "black")
+```
+
+origin(boundary 로 바뀜)을 사용, 경계 이동. 
+
+```{r}
+h <- ggplot(faithful, aes(x = waiting))
+h + geom_histogram(binwidth = 8, fill = "white", colour = "black", boundary = 31)
+```
+
+```{r}
+h + geom_histogram(binwidth = 8, fill = "white", colour = "black", boundary = 35)
+```
+
+데이터가 이산 값일 때 히스토그램 빈의 아래쪽 경계는 닫혀있고 위쪽 경계는 열려있음.\
+[1,2), [2,3) : 첫번째 빈에는 1은 들어있지만 2는 들어있지 않음. 
+동일한 효과를 내는 함수 : geom_bar(stat = "bin")
+
+#### 그룹화한 데이터로 여러개의 히스토그램 생성하기
+
+면을 분할하는 변수로 smoke 사용
+```{r}
+library(MASS)
+#str(birthwt)
+ggplot(birthwt, aes(x = bwt)) + 
+  geom_histogram(fill = "white", colour = "black") +
+  facet_grid(smoke ~ .)
+```
+
+```{r}
+birthwt1 <- birthwt
+birthwt1$smoke <- factor(birthwt1$smoke)
+levels(birthwt1$smoke)
+```
+
+```{r}
+library(plyr)
+birthwt1$smoke <- revalue(birthwt1$smoke, c("0" = "No smoke", "1" = "Smoke"))
+```
+
+
+```{r}
+ggplot(birthwt1, aes(x = bwt)) + 
+  geom_histogram(fill = "white", colour = "black") +
+  facet_grid(smoke ~ .)
+```
+
+y축 눈금크기를 독립적으로 변경되게 : scale = "free"
+```{r}
+ggplot(birthwt1, aes(x = bwt)) + 
+  geom_histogram(fill = "white", colour = "black") +
+  facet_grid(race ~ ., scale = "free")
+```
+
+fill 에 집단분류 변수를 대입 
+```{r}
+ggplot(birthwt1, aes(x = bwt, fill = smoke)) +
+  geom_histogram(position = "identity", alpha = 0.4)
+```
+
+### 밀도곡선 그리기
+
+커널밀도곡선(kernel density curve) : geom_density() 이용, x에 연속변수 대입
+```{r}
+ggplot(faithful, aes(x = waiting)) +
+  geom_density()
+```
+
+양 옆과 아래쪽에 선이 나오지 않게 하려면 geom_line(stat = "density")
+
+```{r}
+ggplot(faithful, aes(x = waiting)) +
+  geom_line(stat = "density") +
+  expand_limits(y = 0)
+```
+
+#### 밀도곡선을 히스토그램에 겹쳐보이도록
+밀도곡선의 y값을 맞추기 위해 y = ..density.. 를 대입해서 히스토그램의 크기를 줄여 밀도곡선에 맞춤.
+
+
+```{r}
+ggplot(faithful, aes(x = waiting, y = ..density..)) +
+  geom_histogram(fill = "cornsilk", colour = "grey60", size = .2) +
+  geom_density() +
+  xlim(35, 105)
+```
+
+```{r}
+ggplot(birthwt1, aes(x = bwt, colour = smoke))  +
+  geom_density()
+```
+
+```{r}
+ggplot(birthwt1, aes(x = bwt, fill = smoke))  +
+  geom_density(alpha = .3)
+```
+
+```{r}
+ggplot(birthwt1, aes(x = bwt)) +
+  geom_density() +
+  facet_grid(smoke ~ .)
+```
+

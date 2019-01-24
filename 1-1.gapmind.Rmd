@@ -1,0 +1,381 @@
+---
+title: "R 기본함수를 이용한 데이터 가공과 시각화"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    fig_caption: yes
+    fig_height: 5.65
+    fig_width: 8.75
+    highlight: tango
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+---
+
+# Gapminder data 로딩
+
+- 국가별 통계자료를 모아놓은 Gapminder (http://www.gapminder.org/) 데이터의 축약본.
+- 기대수명(life expectancy), GDP per capita(인당 GDP), population(인구) 데이터를 국가별, 대륙별로 제공.
+- gapmind 패키지 설치로 데이터 로딩.
+
+```{r}
+#install.packages("gapminder")
+library(gapminder)
+head(gapminder)
+data(gapminder)
+```
+
+## 분석할 데이터의 자료구조 확인
+
+```{r}
+str(gapminder)
+```
+
+6개의 변수(열)와 1704개의 관측치(행) 으로 구성된 데이터프레임  
+
+- country : factor with 142 levels (142개 국가)
+- continent : factor with 5 levels (5개 대륙)
+- year : ranges from 1952 to 2007 in increments of 5 years (1952년~2007년까지 5년 간격, int)
+- lifeExp : life expectancy at birth, in years (해당연도에 태어난 사람의 기대수명, num)
+- pop : population (인구수, int)
+- gdpPercap : GDP per capita (US$, inflation-adjusted) (인당 GDP, num)
+
+
+# 기술통계 분석
+
+```{r}
+summary(gapminder)  # 요약통계량
+mean(gapminder$lifeExp)  # 평균값
+median(gapminder$lifeExp)  # 중앙값
+sd(gapminder$lifeExp)  # 표준편차 standard deviation
+var(gapminder$lifeExp)  # 분산 variance
+min(gapminder$lifeExp)  # 최소값
+max(gapminder$lifeExp)  # 최대값
+quantile(gapminder$lifeExp)  # 사분위수
+fivenum(gapminder$lifeExp) # 최소값, 1사분위, 중위수, 3사분위, 최대값
+round(fivenum(gapminder$lifeExp), 1) # 소수점 자리수 지정 (반올림)
+ceiling(fivenum(gapminder$lifeExp)) # 올림
+abs(fivenum(gapminder$lifeExp)) # 절대값
+```
+
+## Package ‘Hmisc’(Harrell Miscellaneous)
+
+- Author : Frank E Harrell Jr
+- Contains many functions useful for data analysis
+    + high-level graphics, utility operations
+    + functions for computing sample size and power
+    + importing and annotating datasets
+    + imputing missing values
+    + advanced table making
+    + variable clustering
+    + character string manipulation
+    + conversion of R objects to LaTeX and html code
+    + recoding variables.
+
+```{r}
+library(Hmisc)
+Hmisc::describe(gapminder)  # 변수별로 다양한 기술통계량을 한번에 구해줌
+```
+
+
+# 데이터프레임에서 특정 조건에 맞는 데이터 추출
+
+## 행과열 선택 : [ ] 연산자로 인덱스
+```{r}
+gapminder[gapminder$country == "Korea, Rep.", "pop"]
+gapminder[gapminder$country == "Korea, Rep.", c("year", "pop")]
+```
+
+
+## 열 선택 : [행,열] 중에 지정하지 않으면 모든 행 또는 열 선택
+```{r}
+# gapminder$country  # $ 연산자로 열(column) 인덱스
+gapminder[, c("year", "pop", "gdpPercap")]  # 열 이름을 벡터화하여 선택
+gapminder[, 1:3]  # 숫자 인덱스
+```
+
+## 특정 조건을 갖는 행 선택 : " == " 연산자로 조건지정
+```{r}
+gapminder[gapminder$country == "Korea, Rep.", ] 
+gapminder[gapminder$lifeExp == 23.599, ] 
+gapminder[gapminder$year == 2007, ]  
+gapminder[gapminder$country == "Korea, Rep." & gapminder$year == 2007, ]  # Boolean AND operator
+gapminder[1:10, ]  # 숫자 인덱스
+```
+
+## 정렬 순서 지정
+```{r}
+gapminder[order(gapminder$year, gapminder$country), ]  # 연도순, 국가순 정렬
+```
+
+## 변수명 바꾸기
+```{r}
+names(gapminder) # 변수명 조회
+names(gapminder)[6] <- 'gdpPerCap' # 6번째 변수명 변경
+```
+
+
+# 연속형 데이터 분석 및 시각화 : 기대수명과 인당GDP 상관관계 분석
+
+## 우리나라 데이터 추출
+```{r}
+#  우리나라 표기방식 확인 : 유일한 값 확인
+unique(gapminder$country)  # 열 중복제거
+kor <- gapminder[gapminder$country == "Korea, Rep.", ]
+```
+
+## 연도, 기대수명, 인당 GDP 속성 추출
+```{r}
+kor <- kor[, c(3, 4, 6)] # 3, 4, 6 행만 추출
+names(kor) <- c("year", "life_exp", "gdp_cap") # 칼럼명 변경
+str(kor)
+```
+
+## 두 연속형 변수의 관계 시각화
+
+두개의 연속형 변수의 시각화는 산점도(Scatterplot)을 이용할 수 있다. 
+
+### Generic X-Y Plotting 
+
+내장패키지 graphics::plot은 기본 산점도 그래프를 그리는 함수이다.
+
+- usage : plot(x, y = NULL, type = "p",  xlim = NULL, ylim = NULL,
+     log = "", main = NULL, sub = NULL, xlab = NULL, ylab = NULL,
+     ann = par("ann"), axes = TRUE, frame.plot = axes,
+     panel.first = NULL, panel.last = NULL, asp = NA, ...)
+
+- parameter : 
+    + type = "p" : points, "l" : lines, "b" : points & lines, 
+    "c" : empty points joined by lines, "o" : overplotted points and lines, 
+    "s" and "S" : stair steps, "h" for histogram-like vertical lines,
+    "n" : does not produce any points or lines.
+    + xlim, ylim : 각각 x축과 y축의 범위
+    + main, sub : 각각 메인타이틀과 서브타이틀
+    + xlab, ylab : 각각 x축과 y축의 제목
+    
+```{r}
+plot(kor$gdp_cap, kor$life_exp, type = "p")
+plot(kor$gdp_cap, kor$life_exp, 
+     main = "우리나라의 인당 국민소득과 기대수명",
+     sub = "1952년~2007년",
+     xlab = "인당 국민소득(US$) ",
+     ylab = "기대수명",
+     panel.first = grid(8, 8),
+     pch = 1, cex = 0.8, col = "blue")
+```
+
+### Double Y Graph
+연도별 인당 국민소득과 기대수명을 하나의 그래프에 표현
+
+#### latticeExtra 패키지의 doubleYScale() 함수를 이용
+```{r}
+#install.packages("latticeExtra")
+library(latticeExtra)
+```
+
+#### step 1. show original data
+```{r}
+xyplot(life_exp + gdp_cap ~ year, kor, xlim = c(1955, 2005), type = "l")
+```
+
+#### step 2. construct separate plots for each series
+```{r}
+obj1 <- xyplot(life_exp ~ year, kor, xlim = c(1955, 2005), type = "l", lwd=2)
+obj2 <- xyplot(gdp_cap ~ year, kor, xlim = c(1955, 2005), type = "l", lwd=2)
+doubleYScale(obj1, obj2, add.ylab2 = TRUE)
+```
+
+#### re-plot with different styles
+```{r}
+update(doubleYScale(obj1, obj2, 
+    text = c("Life Expectation (year)", "GDP per Capita (US$)")),
+    par.settings = simpleTheme(col = c('red','blue'), lty = 1:2))
+```
+
+### doubleY graph 좀더 살펴보기 
+
+```{r}
+## multi-panel
+data(SeatacWeather)
+temp <- xyplot(min.temp + max.temp ~ day | month,
+               data = SeatacWeather, type = "l", layout = c(3, 1))
+rain <- xyplot(precip ~ day | month, data = SeatacWeather, type = "h")
+
+doubleYScale(temp, rain, style1 = 0, style2 = 3, add.ylab2 = TRUE,
+   text = c("min. T", "max. T", "rain"), columns = 3)
+```
+
+### ggplot2 패키지를 이용한 시각화
+
+2007년도 평균소득과 기대수명 산점도
+```{r}
+# library(dplyr)
+# library(ggplot2)
+# gapminder %>% filter(year == 2007) %>%
+#     ggplot(aes(gdpPercap, lifeExp)) +
+#     geom_point() +
+#     scale_x_log10() +
+#     ggtitle("Gapminder data for 2007")
+```
+
+대륙과 인구수 변수도 나타내고 싶다. 
+```{r}
+# library(ggplot2)
+# gapminder %>% filter(year == 2007) %>%
+#     ggplot(aes(gdpPercap, lifeExp)) +
+#     geom_point(aes(size=pop, col=continent)) +
+#     scale_x_log10() +
+#     ggtitle("Gapminder data for 2007")
+```
+
+## 상관분석 (Correlation Analysis)
+
+### 상관계수 (Correlation Coefficient)
+- 상관계수는 두 변수 간의 선형적인 관계를 나타내는 측도
+- 상관계수는 -1과 1사이의 값을 가지며, 1 또는 -1에 가까울수록 선형적인 관계가 강하며, 0에 가까울수록 그 관계가 약하다고 할 수 있다. 
+- 피어슨 상관계수(모수적), 스피어만 상관계수, 켄달의 타우(비모수적)
+- cor() 함수로 상관분석을 수행한다. 
+
+```{r}
+cor(kor$life_exp, kor$gdp_cap)
+```
+
+### 상관계수에 대한 검정
+
+```{r}
+cor.test(kor$life_exp, kor$gdp_cap)
+```
+
+## 회귀분석 
+
+설명변수(x) 를 이용하여 반응변수(y) 를 예측하기 위한 가장 간단하지만 유용한 모형은 선형회귀 모형 (linear regression model) 이다. 하나의 x 변수로 이루어진 모형을 단순회귀분석 모형 (simple regression model) 이라 한다. 
+
+- lm( ) 함수를 통해서 회귀 방정식과 R^2^ 을 summary( ) 함수결과에서 확인할 수 있다. 
+- summary( ) 함수는 회귀를 해석하는데 필요한 모든 정보를 제공한다. 
+
+```{r}
+lm1 <- lm(life_exp ~ gdp_cap, kor)
+summary(lm1) 
+```
+
+### 회귀계수
+
+- 절편(Intercept)과 기울기(slop)에 대한 추정값(Estimate), 표준편차(Std. Error), t값 (t value = Estimate/Std. Error), p값(Pr(>|t|)) 을 보여줌
+
+- 적합된 모형은 다음과 같다. 
+    + lifeExp = 55.30 + 0.001181 * gdp_cap
+
+- lifeExp 값에 대한 gdp_cap의 선형효과는 통계적으로 유의.
+    + p-value: 5.867e-05, 귀무가설(Ho:beta = 0) reject
+
+### 모형적합도 검정 (모형 전체의 설명력) 
+- 수정결정계수(Adjusted R-squared) : 0.796 
+- 반응변수의 총 변동 중 79.6% 가 모형으로 설명됨
+- cf) 결정계수 (Multiple R-squared) 는 설명변수의 개수가 늘어날 때마다 항상 증가하기 때문에 적합한 성능척도가 아님. 이러한 문제점을 보완하기 위해서 설명변수 x 의 개수가 많아지면 패널티를 받도록 수정을 가한 값이 수정결정계수.   
+    
+
+# 범주형 데이터 분석 : 대륙별 기대수명 분포 
+
+1. 상자수염그림(Boxplot) 을 사용하여 데이터를 시각화함으로써 집합간의 평균과 중앙값의 차이가 존재하는지, 이상치(outlier)는 존재하는지, 각 집단의 분산은 유사한지 등을 확인한다. 
+
+2. 설명변수가 범주형이고 반응변수가 수량형일 경우에는 lm( ) 함수로 ANOVA 선형모형을 적합하고 summary.lm( ) 함수로 결과를 분석한다. 
+
+## Boxplot 으로 시각화
+
+```{r}
+boxplot(lifeExp~continent, gapminder, main="대륙별 기대수명")
+```
+
+## 분산분석(ANOVA) :  집단 별 차이가 통계적으로 의미가 있는지 검증
+
+- 일원배치 분산분석 One-way ANOVA) : 독립된 세 집단 이상의 평균을 비교하고자 할 때 (평균의 차이가 의미 있는지 알아보고자 할 때) 사용하는 분석 방법
+
+```{r}
+summary(aov(lifeExp ~ continent, gapminder))
+```
+
+- anova 함수에 lm(선형모델) 함수값을 전달하여 동일한 일원분산분석 수행할 수 있음.
+
+```{r}
+anova(lm(lifeExp ~ continent, gapminder))
+```
+
+대륙 집단에 따른 평균 기대수명 차이는 통계적으로 유의함.
+
+
+### 유럽 대륙 기대수명의 이상치(outlier) 값(value) 추출
+
+`-1.5 * IQR` ~ `1.5 * IQR` 의 구간을 벗어나 있는 경우를 outlier 라 정의함. 
+```{r}
+europe <- gapminder[gapminder$continent == "Europe", ]
+boxplot.stats(europe$lifeExp)$out
+```
+
+위 값에 해당되는 국가와 연도는 언제인가?
+
+### 유럽의 기대수명 이상치(outlier) 데이터 추출
+
+- outlier 여부를 TRUE/FALSE 로 반환하는 함수 정의
+- `which( )`함수는 TRUE/FALSE 로 이루어진 vector를 인수로 받아서 TRUE 값을 가지는 index의 위치값을 반환
+
+```{r}
+is_outlier <- function(x) {
+  return(x < quantile(x, 0.25) - 1.5 * IQR(x) | x > quantile(x, 0.75) + 1.5 * IQR(x))
+}
+
+which(is_outlier(europe$lifeExp))
+```
+
+### 행 인덱스를 추출하는 방법 2가지.
+
+#### 위치값 인덱스 벡터를 대입하여 인덱스에 해당되는 행 추출
+
+```{r}
+europe[c(1, 2, 37, 38, 49, 193, 241, 265, 337, 338, 339, 340, 341, 342), ] 
+```
+
+#### 인덱스 벡터를 변수에 할당하여 행 인덱스
+
+```{r}
+index_vector <- is_outlier(europe$lifeExp)
+europe[index_vector, ]
+```
+
+## 연도별 이상치 빈도분석
+
+### 도수분포표와 히스토그램
+
+```{r}
+europe_lifeExp_outlier <- europe[c(1, 2, 37, 38, 49, 193, 241, 265, 337, 338, 339, 340, 341, 342), ] 
+table(europe_lifeExp_outlier$year)
+hist(europe_lifeExp_outlier$year)
+```
+
+### 줄기-잎 그림
+
+- 줄기-잎 그림(stem-and-leaf disply)은 연속형 자료를 시각적으로 나타내는 방법 가운데 하나로, stem() 함수를 사용한다. 
+- 자료의 큰 단위 값을 나무 줄기(stem)에, 작은 단위 값을 잎(leaf)에 배치하는 방법으로 자료를 시각화 하는 방법이다. 
+
+```{r}
+#stem and leaf 
+stem(europe_lifeExp_outlier$year)
+```
+
+## 대륙별 평균 기대수명 비교
+
+`aggregate( )` 함수를 이용하여 대륙별로 관측기간 평균 기대수명 산출
+
+```{r}
+aggregate(lifeExp ~ continent, gapminder, mean)
+aggregate(lifeExp ~ continent, gapminder, median)
+```
+
+
+
+RMD 파일에서 R code 추출
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+library(knitr)
+purl("1-1.gapmind.Rmd", encoding = "UTF-8")
+```
+
+

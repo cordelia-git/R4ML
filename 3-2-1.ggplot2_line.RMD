@@ -1,0 +1,118 @@
+---
+title: "ggplot2_line"
+output:
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### 선그래프(Line Chart) 그리기
+
+시간에 따라 달라지는 데이터를 표현할 때 주로 선 그래프를 이용함.\
+일별환율처름 일정 시간간격을 주고 나열된 데이터를 '시계열 데이터(Time Series Data)' 라고 하고, \
+시계열 데이터를 선으로 표현한 그래프를 '시계열 그래프(Time Series Chart)' 라고 함. 
+
+- ggplot2내의 economics 는 미국의 경제 지표들을 월별로 나타낸 데이터.
+
+```{r}
+library(ggplot2)
+ggplot(economics, aes(x = date, y = unemploy)) +
+  geom_line()
+```
+
+#### Q1.
+psavert(개인 저축률)가 시간에 따라 어떻게 변해왔는지 알아보려고 합니다. 시간에 따른 개인 저축률의 변화를 나타낸 시계열 그래프를 만들어 보세요. 
+
+```{r}
+ggplot(economics, aes(x = date, y = psavert)) +
+  geom_line()
+```
+
+선그래프는 전형적으로 x축 상의 연속변수의 변화에 따른 y축 상의 연속변수를 시각화할 때 사용함. 
+
+#### 선그래프에 데이터 점 추가하기
+
+```{r}
+ggplot(BOD, aes(x = Time, y = demand)) +
+  geom_line() +
+  geom_point()
+```
+
+#### 여러개의 선을 넣은 그래프 그리기
+
+x축과 y축에 대입한 변수 이외에 다른 변수(이산)를 colour 또는 linetype에 대입한다. 
+
+
+```{r}
+library(dplyr)
+tg <- ToothGrowth %>% 
+  group_by(supp, dose) %>% 
+  summarise(length = mean(len))
+
+ggplot(tg, aes(x = dose, y = length, colour = supp)) +
+  geom_line()
+```
+
+
+```{r}
+ggplot(tg, aes(x = dose, y = length, linetype = supp)) +
+  geom_line()
+```
+`
+
+```{r}
+ggplot(tg, aes(x = dose, y = length, fill = supp)) +
+  geom_line() +
+  geom_point(size = 4, shape = 21)
+```
+
+#### 선의 외형 변경하기
+
+- 선의 종류는 linetype 으로 설정
+- 선의 두깨(mm)는 size 로 설정
+- 선의 색깔은 colour 로 설정
+
+```{r}
+ggplot(BOD, aes(x = Time, y = demand)) +
+  geom_line(linetype = "dashed", size = 1, colour = "blue")
+```
+
+#### 그래프 영역에 음영 넣기
+
+geom_area()를 사용해서 음영영역을 만듬. 
+
+```{r}
+sunspotyear <- data.frame(Year = as.numeric(time(sunspot.year)), 
+                          Sunspots = as.numeric(sunspot.year))
+ggplot(sunspotyear, aes(x = Year, y = Sunspots)) +
+  geom_area()
+```
+
+```{r}
+ggplot(sunspotyear, aes(x = Year, y = Sunspots)) +
+  geom_area(colour = "black", fill = "blue", alpha = .2)
+```
+
+```{r}
+ggplot(sunspotyear, aes(x = Year, y = Sunspots)) +
+  geom_area(fill = "blue", alpha = .2) +
+  geom_line()
+```
+
+#### 누적영역 그래프 그리기
+
+geom_area() 를 사용하고 fill 에 요인을 대입한다. 
+
+```{r}
+library(gcookbook)
+ggplot(uspopage, aes(x = Year, y = Thousands, fill = AgeGroup)) +
+  geom_area()
+```
+
+```{r}
+ggplot(uspopage, aes(x = Year, y = Thousands, fill = AgeGroup)) +
+  geom_area(colour = "black", size = .2, alpha = .4) +
+  scale_fill_brewer(palette = "Blues", breaks = rev(levels(uspopage$AgeGroup)))
+```

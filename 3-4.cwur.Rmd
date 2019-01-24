@@ -1,0 +1,126 @@
+---
+title: "3-3.cwur.RMD"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### 파일 읽어들이기
+
+The Center for World University Rankings (CWUR) 에서 제공하는 전세계 대학 순위 정보. (https://cwur.org/)  
+
+2012년 ~2018년 대학별 순위, 국내순위, 교육의 질, 졸업생 취업, 단과대학의 질, 출판물, 영향력, 인용, 특허, 총 점수 등의 정보를 제공. 
+
+CWUR uses seven objective and robust indicators to rank the world's top 1000 universities:
+
+1) *Quality of Education*, measured by the number of a university's alumni who have won major international awards, prizes, and medals relative to the university's size (15%)
+2) *Alumni Employment*, measured by the number of a university's alumni who have held CEO positions at the world's top companies relative to the university's size (15%) 
+3) *Quality of Faculty*, measured by the number of academics who have won major international awards, prizes, and medals (15%) 
+4) *Research Output*, measured by the the total number of research papers (15%) 
+5) *Quality Publications*, measured by the number of research papers appearing in top-tier journals (15%) 
+6) *Influence*, measured by the number of research papers appearing in highly-influential journals (15%) 
+7) *Citations*, measured by the number of highly-cited research papers (10%)
+
+
+```{r}
+library(dplyr)
+library(ggplot2)
+data <- read.csv("data/cwur_data.csv", stringsAsFactors = F)
+str(data)
+sapply(data, function(x){sum(is.na(x))})
+#Hmisc::describe(data)
+```
+
+
+```{r}
+dplyr::filter(data, country == "South Korea", world_rank < 100)
+```
+
+```{r}
+# 결측치 합계 확인
+sum(is.na(data))
+# 변수별 결측치 갯수(합계) 확인
+sapply(data, function(x){sum(is.na(x))})
+```
+
+### Top 5 대학 변동 추이
+
+
+```{r}
+data %>% 
+    group_by(year) %>% 
+    select(year, institution, world_rank) %>% 
+    top_n(-5, wt = world_rank) %>%
+    ggplot(aes(x = year, y = world_rank, group = institution)) +
+    geom_line(aes(color=institution)) +
+    geom_point(aes(shape=institution, color=institution)) + 
+    theme_bw() +
+    labs(x="Year", y="World Rank", 
+         title="World Ranks (2012-2018)",
+         subtitle="Best World ranked Universities by CWUR") 
+```
+
+```{r}
+# data %>%
+#     select(world_rank, institution, year) %>%
+#     filter(institution == "California Institute of Technology")
+```
+
+```{r}
+str(data)
+harvard <- data %>% filter(institution == "Harvard University")
+harvard
+
+top100 <- data %>% filter(world_rank < 100) 
+str(top10)
+```
+
+```{r}
+library(plotly)
+
+# boxplot
+p <- plot_ly(top100, x = ~quality_of_education, color = ~country, type = "box")
+p
+```
+
+
+### Interactive geo plot
+
+```{r}
+ccwur <- data %>% 
+    group_by(country,year) %>% 
+    summarise(nr = length(world_rank), minw=min(world_rank), maxw=max(world_rank), avgw=round(mean(world_rank),0)) %>%
+    select(country, year, nr, minw, maxw, avgw) %>% 
+    ungroup()
+
+# light grey boundaries
+#l <- list(color = toRGB("grey"), width = 0.5)
+ccwur$hover <- with(ccwur, 
+        paste("Country: ", country, '<br>', 
+              "Year: ",year, "<br>",
+              "Universities in top: ", nr, "<br>",
+              "Min rank in top: ", minw, "<br>",
+              "Max rank in top: ", maxw, "<br>",
+              "Mean rank in top: ", avgw,"<br>"
+              ))
+# specify map projection/options
+g <- list(
+  showframe = TRUE,
+  showcoastlines = TRUE,
+  projection = list(type = 'orthogonal')
+)
+
+library(plotly)
+plot_geo(ccwur, locationmode = 'country names') %>%
+  add_trace(
+    z = ~nr, color = ~nr, colors = 'Spectral', frame = ~year,
+    text = ~hover, locations=~country) %>%
+  colorbar(title = 'Number of\nuniversities in top', tickprefix = '') %>%
+  layout(
+    title = with(ccwur, paste('Number of universities in top')),
+    geo = g
+  )
+```
+

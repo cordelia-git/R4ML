@@ -1,0 +1,374 @@
+---
+title: 지하철 역별 승하차 정보를 이용한 시각화
+output:
+  html_document: default
+  word_document: 
+    highlight: tango
+    reference_docx: mytemplate.docx
+mainfont: NanumGothic
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+-------
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, paged.print=FALSE}
+library(dplyr)
+library(ggplot2)
+library(reshape)
+library(stringr)
+library(knitr)
+```
+
+서울교통공사와 서울시 열린데이터 광장에서 제공하는 공공데이터 중, 서울시 지하철호선별 역별 승하차 인원 정보를 바탕으로 연도별, 역별, 노선별 탑승객수를 시각화해보자. 
+- subway.csv : 2010년 1월부터 2014년 7월까지 서울지하철역 및 시간대별 승하차 인원수 정보
+- subway_latlong.csv : 지하철 노선별 역이름 및 위치정보(위도, 경도) 자료 및 각 역의 노선명 정보  
+
+http://www.seoulmetro.co.kr/kr/board.do?menuIdx=551&bbsIdx=2204453
+
+
+## 분석과제 
+1. 노선별, 역별로 지하철 탑승객 수를 비교할 수 있도록 역별 누적탑승객수를 시각화 해보자
+2. 누적 탑승객수가 가장 많은 10개 지하철역과 가장 적은 10개 지하철역을 추출해보자
+3. 전체 탑승객의 노선별 비율을 시각화 해보자
+4. 노선별 누적탑승객수를 월별로 비교해보자
+
+# 1. 승하차 데이터에 대해 필요한 전처리
+
+### subway.csv 파일 로딩 및 자료정리 
+read.csv 파일로 읽어들인 raw data 는 컬럼수가 많아 실행속도가 느리기 때문에, 이번 분석에서 필요한 컬럼만 선택하여 변수에 넣음으로써 실행속도를 높임. `tibble::glimpse()` 을 이용하여 불러온 데이터프레임의 구조를 확인함. 
+
+```{r}
+subway <- read.csv('data/subway.csv', header=TRUE, stringsAsFactors=FALSE)
+subway <- subway %>% 
+    select(stat_name, income_date, on_tot) # 역명, 일자, 총 탑승인원수 3개 변수만 선택
+glimpse(subway)
+```
+
+### 연, 월 파생변수 생성
+yyyymmdd 방식의 integer로 구성된 income_date 칼럼에서 연, 월을 분리하여 각각 파생변수로 저장하는 과정에서, `stringr::str_sub()`를 이용하고 이후의 분석에서 필요한 factor 로의 형변환 을 함께 처리함. `dplyr::distict()` 기능을 이용하여 수록된 자료의 연도 확인함.
+
+```{r}
+subway$year <- factor(str_sub(subway$income_date, 1, 4)) # 연도 변수
+subway$month <- factor(str_sub(subway$income_date, 5, 6)) # 월 변수
+distinct(subway, year) # 기록된 자료의 연도를 중복없이 출력
+```
+
+### 2014년 자료 제외
+`dplyr::distinct()`를 이용하여 연,월을 중복없이 출력. 맨 뒤에 수록된 연,월을 확인한 후, 1~7월까지만 수록되어 있는 2014년 자료를 `dplyr::filter()`를 이용하여 제외하고 subway2 로 저장함.
+
+```{r}
+subway %>% 
+  distinct(year, month) %>% 
+  tail(10) # 맨뒤 10개 자료 출력
+subway2 <- subway %>% filter(year != "2014") # 2014년 제외
+```
+
+### "역이름(노선)" 형식의 표현을 "역이름"으로 변환
+
+(1) 변환하기 전 역이름 확인 : `dplyr::distict()` 와 `dplyr::arrange( )`를 chaining 하여 역이름을 중복없이 가나다순으로 정렬함. 
+
+```{r}
+subway2 %>% 
+  distinct(stat_name) %>% # 역이름 중복없이 출력
+  arrange(stat_name) %>%  # 가나다순 정렬
+  head(5) # 앞에서 5개
+```
+
+(2) "역이름(숫자)" 형식으로 작성된 행을 추출하여, "역이름"으로 대체함
+- 노선번호를 분리하고, 동일한 형식의 역이름으로 대체하는 과정을 동시에 수행하였음. 
+- 특히, `ifelse()` 에 적용하기 위해서는 logical value(T/F) 를 반환받아야 하므로,  `grep()` 대신 `grepl()` 을 사용하였음.
+
+```{r}
+subway2 <- subway2 %>% 
+    mutate(stat_name = 
+           ifelse(grepl("\\(", subway2$stat_name), # T/F 반환
+                  sapply(strsplit(subway2$stat_name, "\\("), # ( 기준 단어분리
+                         function(x) x[1]), stat_name))
+# 열이름에 ( 가 있으면, ( 를 기준으로 나눈 앞부분의 문자들을 취하고, ( 가 없으면 원래의 역이름을 그대로. 
+```
+
+(3) 변환 후 역이름 확인
+
+```{r}
+subway2 %>% 
+  distinct(stat_name) %>% # 역명을 중복없이 출력
+  arrange(stat_name) %>%  # 역명 가나다순 정렬
+  head(5)
+```
+
+### subway_latlong.csv 파일 로딩 및 및 자료정리 
+ 
+subway_latlong.csv 파일을 읽어들여 분석에 필요한 역이름(STATION_NM) 과 노선명(LINE_NUM)만을 남김. 
+
+```{r}
+subname <- read.csv('data/subway_latlong.csv', header = TRUE, stringsAsFactors = FALSE, skip = 1) # skip=1 파일의 첫행을 읽지 않음.
+
+subname <- subname %>%
+  select(STATION_NM, LINE_NUM)
+```
+
+### 역이름에 노선정보 매핑
+
+탑승정보(subway2)에 존재하지 않는 역별 노선정보를 subname 에서 가져오기 위하여 `dplyr::left_join()` 로 두 테이블을 병합함. subway2 테이블의 stat_name 행과 subname 테이블의 STATION_NM 를 기준으로 join 할 때, 두 테이블의 기준 변수명이 다르므로 `by = c()`으로 지정함.
+
+```{r}
+subway3 <- left_join(subway2, subname, by = c("stat_name" = "STATION_NM"), copy=FALSE) 
+# copy=FALSE 로 역명 컬럼이 중복되지 않도록 함.
+
+glimpse(subway3) 
+```
+ 
+# 2. 연도별, 역별 지하철 탑승객 수의 계산
+
+### 지하철역별 특정연도의 탑승객수 합산 
+
+`dplyr::filter()` 과 함께 매칭연산자 `%in%` 를 사용하여 1~8호선 데이터만 추출하고 `dplyr'::group_by()`와 `dplyr::summarize()`를 이용하여 각 역의 연도별 지하철 탑승객수를 계산함. 노선명 표현방식을 "~호선" 방식으로 변경하고 이후 분석에 필요한 factor 로 바꿔놓음.  
+
+`reshape::cast()` 함수를 사용하여 long form 을 wide form 으로 재구조화.
+
+```{r message=FALSE, warning=FALSE}
+df1 <- subway3 %>% 
+  filter(LINE_NUM %in% c(1:8)) %>% # 1~8호선 자료만 추출
+  select(LINE_NUM, stat_name, year, on_tot) %>% 
+  group_by(LINE_NUM, stat_name, year) %>% 
+  summarize(y.total = sum(on_tot)) 
+
+df1$LINE_NUM <- factor(paste0(df1$LINE_NUM, "호선")) # "~호선" 방식표기
+head(cast(df1, LINE_NUM + stat_name ~ year)) # long form 을 wide formd 으로
+```
+
+### 지하철역별 4개년도 누적 탑승객수 계산
+
+역별 4년 누적합계를 계산하여 파생변수를 생성하고, 그래프 출력시 노선별로 그루핑되게 하기 위해 역이름 속성을 factor 로 바꿈 (ggplot2 에서 문자열 벡터는 항목이 어휘순으로 표시되는데 반해, factor 는 factor의 순서에 따라 표시됨). 
+
+```{r}
+df2 <- df1 %>%  
+  select(LINE_NUM, stat_name, y.total) %>% 
+  group_by(LINE_NUM, stat_name) %>% 
+  summarize(total = sum(y.total))
+
+df2$stat_name <- factor(df2$stat_name, levels = df2$stat_name)
+head(df2)
+```
+
+### 지하철역별 누적 탑승객수를 막대그래프로 시각화
+
+단위가 큰 y축 값의 가독성을 높이기 위해 만단위로 표시 : 만 눈금에 해당하는 수치를 받아서 "~만명" 문자열을 반환하는 함수를 만들고 scale에 적용함.
+표준화된 최근 노선색상표로 그래프 색상을 변경함. [노선별 색상 출처](https://ko.wikipedia.org/wiki/%ED%8B%80:%ED%95%9C%EA%B5%AD_%EC%B2%A0%EB%8F%84_%EB%85%B8%EC%84%A0%EC%83%89)
+
+```{r}
+col <- c("#00498B", "#009246", "#F36630", "#00A2D1", "#5940FF", "#CC660D", "#4D8000", "#FF33A6")
+
+label_ko_num = function(num) {
+  ko_num = function(x) {
+    new_num = x %/% 10000
+    return(paste(new_num, '만명', sep = ''))}
+  return(sapply(num, ko_num))} # ~만명 단위으로 변경
+
+ggplot(df2, aes(x=stat_name, y=total, fill=LINE_NUM)) +
+  geom_bar(stat="identity", colour = "white") +
+  scale_fill_manual(name="노선", values=col) +
+  scale_y_continuous(labels = label_ko_num) +
+  theme_bw(base_size = 10, base_family = "NanumGothic") +
+  labs(x="지하철역", y="탑승객수",
+        title="노선별 지하철역 누적 탑승객수",
+        subtitle="2010~2013 4년 누적 승객수 기준",
+        caption="NOTE: 색상출처 - 위키피디아") +
+  theme(axis.title=element_text(colour="blue", size = 10)) +
+  theme(axis.text.x=element_blank()) + # 지하철역명 안 나타나게
+  theme(axis.text.y=element_text(size = 8)) +
+  theme(legend.position="right") # 범례위치 오른쪽
+```
+
+# 3. 탑승객수 기준 상위/하위 10개역 추출 및 정보 시각화 
+
+###  4년간 탑승객 수 상위 10개역 추출
+
+역별 누적탑승객수를 산출한 df2 의 total 변수를 `dplyr::arrange(desc())` 함수에 적용하여 상위 10개를 추출함
+
+```{r}
+df3 <- df2 %>% 
+  arrange(desc(total)) %>% 
+  head(10)
+df3
+```
+
+### 4년간 탑승객 수 상위 10개역 막대그래프 그리기
+
+x 축을 y값이 큰 순으로 `reorder()` 하여 직관성을 높임. 앞의 그래프와 호선별 막대컬러를 동일하게 적용하고, 뒤이어서 나올 하위 10개역과의 비교를 위해 y축의 범위를 지정함. 탑승객수 순으로 재정렬.
+
+```{r message=FALSE, warning=FALSE}
+ggplot(df3, aes(x = reorder(stat_name, -total), y = total, fill = LINE_NUM)) +
+  geom_bar(stat="identity", colour = "white") +
+  scale_fill_manual(name="노선", values=c("#00498B", "#5940FF", "#4D8000")) +
+  scale_y_continuous(labels = label_ko_num, limits = c(0, max(df2$total))) +
+  labs(x="지하철역", y="탑승객수",
+      title="탑승객 수 기준 상위 10개 역",
+      subtitle="2010~2013 4년 누적 승객수 기준") +
+  theme_bw(base_size = 10, base_family = "NanumGothic") +
+  theme(axis.title=element_text(colour="blue", size = 10)) +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+  theme(axis.text.y = element_text(size = 8)) +
+  theme(legend.position="right")
+```
+
+### 4년간 탑승객 수 하위 10개역 추출
+
+역별 누적탑승객수를 산출한 df2 의 total 변수를 `dplyr::arrange(())` 함수에 적용하여 하위 10개를 추출함
+
+```{r}
+df4 <- df2 %>% 
+  arrange((total)) %>% 
+  head(10)
+df4
+```
+
+### 4년간 탑승객 수 하위 10개역 막대그래프 그리기
+
+y축의 범위를 c(0, max(df2$total) 로 동일한 범위로 시각화함으로써 상위 10개역과 하위 10개역 탑승객수의 비교를 용이하게 함. 탑승객수 적은 순으로 재정렬.
+
+```{r message=FALSE, warning=FALSE}
+ggplot(df4, aes(x = reorder(stat_name, total), y = total, fill = LINE_NUM)) +
+  geom_col() +
+  scale_fill_manual(name="노선", values=c("#00498B", "#5940FF", "#CC660D", "#4D8000")) +
+  scale_y_continuous(labels = label_ko_num, limits = c(0, max(df2$total))) +
+  labs(x="지하철역", y="탑승객수",
+      title="탑승객 수 기준 하위 10개 역",
+      subtitle="2013~2013 4년 누적 승객수 기준") +
+  theme_bw(base_size = 10, base_family = "NanumGothic") +
+  theme(axis.title=element_text(colour="blue", size = 10)) +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+  theme(axis.text.y = element_text(size = 8)) +
+  theme(legend.position="right")
+```
+
+### 2013년 상위 10개역 월별 탑승객 추이 
+
+상위 10개역의 2013년 월별 탑승객수 추출 : month 칼럼을 갖고 있는 subway3 테이블에서 matching operatora `%in%` 와 equal operator `==` 을 이용해서 상위 10개역의 2013년도 데이터를 필터링하고 월별 탑승객의 합계를 계산함.  
+
+```{r message=FALSE, warning=FALSE}
+top10_stat_num <- df3$stat_name # 상위 10개역명 변수저장
+df6 <- subway3 %>% 
+  select(stat_name, year, month, on_tot) %>% 
+  filter(stat_name %in% top10_stat_num & year == "2013") %>% 
+  group_by(stat_name, month) %>% 
+  summarize(m.total = sum(on_tot))
+
+df6$stat_name <- factor(df6$stat_name)
+df6$month <- paste0(df6$month, "월") # month 표현을 '~월'로 변환
+cast(df6, stat_name ~ month) #long form 을 wide formd 으로 재구조화
+```
+
+### 2013년 상위 10개역 월별 탑승객수를 Line Chart 를 이용하여 시각화
+
+```{r message=FALSE, warning=FALSE}
+ggplot(df6, aes(x=month, y=m.total, colour=stat_name, group=stat_name)) +
+  geom_line() + 
+  theme_bw(base_size = 10, base_family = "NanumGothic") +
+  geom_point(size=4, shape=19, alpha=0.5) + 
+  scale_x_discrete("2013년") + 
+  scale_y_continuous(labels = label_ko_num) +
+  ylab("월별 탑승객수") + 
+  scale_colour_discrete(name=c("지하철역")) + 
+  ggtitle("2013년 상위 10개역의 월별 탑승객 추이")
+```
+
+# 4. 노선별 역당 평균 탑승객수 계산 및 비교
+
+### 각 노선에 포함되는 역들의 평균 탑승객수 계산
+
+노선별로 해당 역들의 탑승객수의 합을 구한 후, 노선별로 평균 탑승객수를 구함
+```{r}
+df7 <- df2 %>% 
+  group_by(LINE_NUM, stat_name) %>% 
+  summarize(sum.tot = sum(total))
+
+df8 <- df7 %>% 
+  group_by(LINE_NUM) %>% 
+  summarize(mean.tot = mean(sum.tot)) %>% 
+  mutate(pct = round(mean.tot/sum(mean.tot), 4)*100)
+```
+
+### Pie Chart 를 이용하여 노선별 탑승객수를 시각화
+
+```{r}
+col2 <- c("#00498B", "#009246", "#F36630", "#00A2D1", "#5940FF", "#CC660D", "#4D8000", "#FF33A6", "#BB1833", "#6E98BB")
+
+label <- paste(df8$LINE_NUM, "(", df8$pct, "%", ")", sep = "")
+#label <- paste0(df8$LINE_NUM, "(", df8$pct, "%", ")")
+
+label <- paste(df8$LINE_NUM, "(", df8$pct, "%", ")", sep = "")
+pie(df8$mean.tot, labels=label, col=col2, border="lightgray", main="노선별 평균 지하철 탑승객 수")
+
+```
+
+# 5. 노선별 누적 승객수의 상대비교
+
+### 각 노선에 대하여 월별 총 탑승객수 계산
+
+year 와 month 칼럼의 데이터를 결합하여 yearmonth 칼럼을 생성하고, 영역차트(area chart)를 만들기 위해 날짜형으로 변환함. 
+노선별 2010~2013년 월별 탑승객수 합계를 구해서 상위 3개 확인.
+
+```{r}
+subway3$yearmonth <- as.Date(paste(subway3$year, subway3$month, "01", sep = "-")) 
+df9 <-  subway3 %>%
+  select(LINE_NUM, yearmonth, on_tot) %>% 
+  group_by(LINE_NUM, yearmonth) %>% 
+  summarize(ym.tot = sum(on_tot))  
+head(df9, 3)
+```
+
+### Area Chart 로 시각화 하기
+
+```{r}
+col2 <- c("#00498B", "#009246", "#F36630", "#00A2D1", "#5940FF", "#CC660D", "#4D8000", "#FF33A6", "#BB1833", "#6E98BB")
+  
+ggplot(df9, aes(x=yearmonth, y=ym.tot, fill=LINE_NUM)) +
+  geom_area(colour="white") +
+  scale_fill_manual(name="노선", values = col2) +
+  scale_y_continuous(labels = label_ko_num) +
+  theme_bw(base_size = 10, base_family = "NanumGothic") +
+  labs(x="Year", y="누적승객수",
+        title="노선별 누적 승객수 상대비교",
+        subtitle="각 노선의 2010~2013년 월별 누적 탑승객수") +
+  theme(axis.title=element_text(colour="red", size = 10)) +
+  theme(axis.text.x=element_text(hjust=c(0, 0.5, 0.5, 0.5, 1))) +
+  theme(axis.text.y=element_text(size = 8)) +
+  theme(legend.position="right")
+```
+
+### 후처리 : NA 발생 원인 확인 
+
+위 그래프의 범례에서 NA 가 나타난 원인을 추적해보니, subway와 subname join 후 (subway3) LINE_NUM 칼럼 중 총 2922 개의 NA 값이 발생한 것이 확인 됨. 
+
+```{r}
+table(is.na(subway3$LINE_NUM))
+```
+
+LINE_NUM 가 매핑되지 않은 역 이름을 확인함 : "동대문역사문화공원5", "이수"
+
+```{r}
+no_LINE_NUM <- subway3 %>% filter(is.na(LINE_NUM))
+unique(no_LINE_NUM$stat_name)
+```
+
+> 원인 확인
+
+(1) 동대문역사문화공원5 : 소스파일1(subway.csv)에 "동대문역사문화공원(5)"가 아니라 "동대문역사문화공원5" 로 되어 있어 "(" 로 detect 되지 않았음 (역이름 입력오류)
+(2) 이수 : 소스파일1(subway.csv)에는 "이수", 소스파일2(subway_latlong.csv) 에는 "총신대입구(이수)"로 통일되지 않게 입력되어 있었기 때문에 매칭되지 않음 (환승역명이 상이할 경우의 역이름 통일오류)
+
+> Implication  
+
+- 환승역에 대한 노선번호 입력 가이드라인을 사전에 확인할 필요가 있었음. (환승역이름 입력시에 노선번호 중 하나를 (숫자)로 표시했을 것으로 추정됨) 
+- 역명을 수정한다면, 아래와 같은 데이터 수정이 필요함.  
+
+```{r}
+# 실행하지 않음. 
+# subway2 %>% 
+#   mutate(stat_name = ifelse(subway2$stat_name == "동대문역사문화공원5", "동대문역사문화공원", subway2$stat_name)) 
+# 
+# subname$STATION_NM[28] <- "이수"
+```
